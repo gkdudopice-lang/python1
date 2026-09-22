@@ -56,27 +56,26 @@ def create_comment_table(conn):
     conn.commit()
     cur.close()
 
-# 회원가입 함수 수정
+#회원가입
 def signup_user(conn):
     cur = conn.cursor()
-    print("\n--- 회원가입 ---")
 
-    user_id = input("아이디(이메일 등): ")
-    if user_id == 'exit':
+    name = input("이름 : ")
+    email = input("이메일 : ")
+    if email == 'exit':
         return "exit"
-    pwd = input("패스워드: ")
-    name = input("이름: ")
-    email = input("이메일: ")
-    addr = input("주소: ")
+    pwd = input("패스워드 : ")
+
+    register_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     try:
-        # userTable 컬럼 순서: id, pwd, name, email, addr
-        sql = "INSERT INTO userTable (id, pwd, name, email, addr) VALUES (%s, %s, %s, %s, %s)"
-        cur.execute(sql, (user_id, pwd, name, email, addr))
+        sql = "INSERT INTO member (name, email, pwd, register_date) VALUES (%s, %s, %s, %s)"
+        cur.execute(sql, (name, email, pwd, register_date))
         conn.commit()
         print("성공적으로 회원가입이 되었습니다.")
 
     except pymysql.err.IntegrityError as e:
+        # MySQL 중복 키 에러 번호인 1062번 확인
         if e.args[0] == 1062:
             print("오류 발생 : 이미 존재하는 아이디입니다.")
         else:
@@ -88,29 +87,27 @@ def signup_user(conn):
     finally:
         cur.close()
 
-
-# 로그인 함수 수정
+# 1. 로그인 함수
 def login_user(conn):
     cur = conn.cursor()
     print("\n--- 로그인 ---")
-    user_id = input("아이디 : ")
+    user_id = input("이메일 : ")
     pwd = input("패스워드 : ")
 
     try:
-        # member1 -> userTable로 변경, 컬럼도 id와 pwd로 맞춤
-        sql = "SELECT * FROM userTable WHERE id = %s AND pwd = %s"
+        sql = "SELECT * FROM member WHERE email = %s AND pwd = %s"
         cur.execute(sql, (user_id, pwd))
         user = cur.fetchone()
 
         if user:
-            # user[2]는 name 컬럼 위치 (id:0, pwd:1, name:2, email:3, addr:4)
-            print(f"로그인 성공! 환영합니다, {user[2]}님.")
+            print(f"로그인 성공! 환영합니다, {user[3]}님.") # name 컬럼 위치에 따라 인덱스 조정 가능
             return True
         else:
-            print("로그인 실패 : 아이디 또는 비밀번호가 잘못되었습니다.")
+            print("로그인 실패 : 이메일 또는 비밀번호가 잘못되었습니다.")
             return False
     finally:
         cur.close()
+
 # 2. 비로그인 상태 메뉴 (회원가입 / 로그인)
 def print_auth_menu():
     print("\n===== 시작 메뉴 =====")
@@ -143,11 +140,6 @@ def delete_post(conn):
     pass
 
 def main():
-    conn = get_connection()
-    create_user_table(conn)
-    create_board_table(conn)
-    create_comment_table(conn)
-    conn.close()
     is_logged_in = False  # 최초 로그인 상태: 아니오 (False)
 
     while True:
