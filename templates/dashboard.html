@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>실시간 관측 패널</title>
+<style>
+  :root{
+    --bg:#0F1720;
+    --panel:#16212C;
+    --panel-edge:#243241;
+    --ink:#E8EDF2;
+    --ink-dim:#7C8B99;
+    --temp:#F2A65A;
+    --hum:#3AAFA9;
+    --rain:#5DA9E9;
+    --line:#2A3A48;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 15% -10%, #1B2733 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Iowan Old Style','Georgia',serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 16px;
+  }
+  .console{
+    width:100%;
+    max-width:760px;
+  }
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    border-bottom:1px solid var(--line);
+    padding-bottom:14px;
+    margin-bottom:22px;
+  }
+  .masthead h1{
+    font-size:22px;
+    font-weight:400;
+    letter-spacing:0.3px;
+    margin:0;
+  }
+  .masthead time{
+    font-family:'SF Mono','Courier New',monospace;
+    font-size:12px;
+    color:var(--ink-dim);
+  }
+  .coords{
+    display:flex;
+    gap:10px;
+    align-items:flex-end;
+    margin-bottom:22px;
+    font-family:'SF Mono','Courier New',monospace;
+    font-size:12px;
+    color:var(--ink-dim);
+  }
+  .coords label{display:block;margin-bottom:6px;}
+  .coords input{
+    width:64px;
+    background:var(--panel);
+    border:1px solid var(--panel-edge);
+    color:var(--ink);
+    padding:8px 10px;
+    border-radius:3px;
+    font-family:'SF Mono','Courier New',monospace;
+    font-size:13px;
+  }
+  .coords input:focus{outline:none;border-color:var(--ink-dim);}
+  .coords button{
+    background:var(--ink);
+    color:var(--bg);
+    border:none;
+    padding:9px 18px;
+    border-radius:3px;
+    font-family:'SF Mono','Courier New',monospace;
+    font-size:12px;
+    cursor:pointer;
+    letter-spacing:0.4px;
+  }
+  .coords button:hover{background:#fff;}
+  .coords button:disabled{opacity:0.5;cursor:default;}
+
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+  }
+  .cell{
+    background:var(--panel);
+    padding:26px 20px 22px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  .cell .label{
+    font-size:12px;
+    color:var(--ink-dim);
+    font-family:'SF Mono','Courier New',monospace;
+    letter-spacing:0.3px;
+  }
+  .cell .value{
+    font-size:44px;
+    line-height:1;
+    font-weight:400;
+  }
+  .cell .value .unit{font-size:16px;color:var(--ink-dim);margin-left:2px;}
+  .dial{
+    width:100%;
+    height:6px;
+    background:#20303E;
+    border-radius:3px;
+    overflow:hidden;
+  }
+  .dial-fill{
+    height:100%;
+    width:0%;
+    border-radius:3px;
+    transition:width 0.9s cubic-bezier(.2,.8,.2,1);
+  }
+  #tmp .value{color:var(--temp);}
+  #tmp .dial-fill{background:var(--temp);}
+  #hum .value{color:var(--hum);}
+  #hum .dial-fill{background:var(--hum);}
+  #pre .value{color:var(--rain);}
+  #pre .dial-fill{background:var(--rain);}
+
+  .status{
+    margin-top:18px;
+    font-family:'SF Mono','Courier New',monospace;
+    font-size:12px;
+    color:var(--ink-dim);
+    min-height:16px;
+  }
+  .status.err{color:#E8756A;}
+
+  @media (max-width:520px){
+    .grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="console">
+  <div class="masthead">
+    <h1>실시간 관측 패널</h1>
+    <time id="clock"></time>
+  </div>
+
+  <div class="coords">
+    <div>
+      <label for="nx">nx</label>
+      <input id="nx" type="number" value="60">
+    </div>
+    <div>
+      <label for="ny">ny</label>
+      <input id="ny" type="number" value="127">
+    </div>
+    <button id="fetchBtn" onclick="loadWeather()">조회</button>
+  </div>
+
+  <div class="grid">
+    <div class="cell" id="tmp">
+      <div class="label">기온</div>
+      <div class="value">—<span class="unit">℃</span></div>
+      <div class="dial"><div class="dial-fill"></div></div>
+    </div>
+    <div class="cell" id="hum">
+      <div class="label">습도</div>
+      <div class="value">—<span class="unit">%</span></div>
+      <div class="dial"><div class="dial-fill"></div></div>
+    </div>
+    <div class="cell" id="pre">
+      <div class="label">강수량</div>
+      <div class="value">—<span class="unit">mm</span></div>
+      <div class="dial"><div class="dial-fill"></div></div>
+    </div>
+  </div>
+
+  <div class="status" id="status">nx / ny 좌표를 입력하고 조회를 누르세요.</div>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:5002/api/weather';
+
+function tick(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleString('ko-KR', { hour12:false });
+}
+tick();
+setInterval(tick, 1000);
+
+function setCell(id, rawValue, unit, pct){
+  const cell = document.getElementById(id);
+  const valueEl = cell.querySelector('.value');
+  const fillEl = cell.querySelector('.dial-fill');
+  valueEl.innerHTML = (rawValue ?? '—') + '<span class="unit">' + unit + '</span>';
+  fillEl.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+function parseNum(str){
+  const n = parseFloat(str);
+  return isNaN(n) ? null : n;
+}
+
+async function loadWeather(){
+  const btn = document.getElementById('fetchBtn');
+  const statusEl = document.getElementById('status');
+  const nx = document.getElementById('nx').value;
+  const ny = document.getElementById('ny').value;
+
+  btn.disabled = true;
+  statusEl.className = 'status';
+  statusEl.textContent = '조회 중…';
+
+  try{
+    const res = await fetch(`${API_BASE}?x=${encodeURIComponent(nx)}&y=${encodeURIComponent(ny)}`);
+    if(!res.ok){
+      throw new Error('서버 응답 오류: ' + res.status);
+    }
+    const data = await res.json();
+
+    const tmpNum = parseNum(data.tmp);
+    const humNum = parseNum(data.hum);
+    const preNum = parseNum(data.pre);
+
+    setCell('tmp', data.tmp ?? '—', '', tmpNum === null ? 0 : ((tmpNum + 10) / 50) * 100);
+    setCell('hum', data.hum ?? '—', '', humNum === null ? 0 : humNum);
+    setCell('pre', data.pre ?? '—', '', preNum === null ? 0 : Math.min(preNum * 10, 100));
+
+    statusEl.textContent = '마지막 갱신: ' + new Date().toLocaleTimeString('ko-KR', { hour12:false });
+  }catch(err){
+    statusEl.className = 'status err';
+    statusEl.textContent = '조회 실패: ' + err.message + ' (서버 실행 여부 및 CORS 설정을 확인하세요)';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+loadWeather();
+</script>
+
+</body>
+</html>
