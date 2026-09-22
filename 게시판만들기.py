@@ -1,7 +1,7 @@
-from datetime import datetime
 import pymysql
+from datetime import datetime
 
-# 1. DB 연결 함수
+# 1. DB 연결
 def get_connection():
     conn = pymysql.connect(host="127.0.0.1", user="root", port=3306,
                            password="1234", database="mysqlDB", charset="utf8")
@@ -10,14 +10,16 @@ def get_connection():
 # 2. 테이블 생성 함수들
 def create_user_table(conn):
     cur = conn.cursor()
+    cur.execute("DROP TABLE IF EXISTS commentTable")
+    cur.execute("DROP TABLE IF EXISTS boardTable")
     cur.execute("DROP TABLE IF EXISTS userTable")
     cur.execute("""
         CREATE TABLE userTable (
-            id CHAR(50) PRIMARY KEY,
-            pwd CHAR(255),
+            id CHAR(10) PRIMARY KEY,
+            pwd CHAR(15),
             name CHAR(20),
-            email CHAR(50),
-            addr CHAR(100)
+            email CHAR(20),
+            addr CHAR(50)
         )
     """)
     conn.commit()
@@ -25,14 +27,14 @@ def create_user_table(conn):
 
 def create_board_table(conn):
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS boardTable")
     cur.execute("""
         CREATE TABLE boardTable (
-            board_id INT AUTO_INCREMENT PRIMARY KEY,
+            board_id BIGINT AUTO_INCREMENT PRIMARY KEY,
             title VARCHAR(50) NOT NULL,
             content TEXT,
+            id CHAR(10),
             writer CHAR(10),
-            reg_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reg_date datetime,
             FOREIGN KEY (writer) REFERENCES userTable(id)
         )
     """)
@@ -41,36 +43,37 @@ def create_board_table(conn):
 
 def create_comment_table(conn):
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS commentTable")
     cur.execute("""
         CREATE TABLE commentTable (
-            comment_id INT AUTO_INCREMENT PRIMARY KEY,
-            board_id INT,
+            comment_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            board_id BIGINT,
+            id CHAR(10),
             writer CHAR(10),
-            content TEXT,
-            reg_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (board_id) REFERENCES boardTable(board_id) ON DELETE CASCADE,
+            content VARCHAR(1000),
+            reg_date datetime,
+            FOREIGN KEY (board_id) REFERENCES boardTable(board_id),
             FOREIGN KEY (writer) REFERENCES userTable(id)
         )
     """)
     conn.commit()
     cur.close()
 
+
 #회원가입
 def signup_user(conn):
     cur = conn.cursor()
-
-    name = input("이름 : ")
-    email = input("이메일 : ")
-    if email == 'exit':
-        return "exit"
+    id = input("아이디 : ")
+    if id == 'exit': return "exit"
     pwd = input("패스워드 : ")
+    name = input("이름 : ")
+    mail = input("이메일 : ")
+    addr = input("주소 : ")
 
     register_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     try:
-        sql = "INSERT INTO member (name, email, pwd, register_date) VALUES (%s, %s, %s, %s)"
-        cur.execute(sql, (name, email, pwd, register_date))
+        sql = "INSERT INTO userTable (id, pwd, name, email, addr) VALUES (%s, %s, %s, %s, %s)"
+        cur.execute(sql, (id, pwd, name, email, addr))
         conn.commit()
         print("성공적으로 회원가입이 되었습니다.")
 
@@ -91,16 +94,16 @@ def signup_user(conn):
 def login_user(conn):
     cur = conn.cursor()
     print("\n--- 로그인 ---")
-    user_id = input("이메일 : ")
+    id = input("아이디 : ")
     pwd = input("패스워드 : ")
 
     try:
-        sql = "SELECT * FROM member WHERE email = %s AND pwd = %s"
-        cur.execute(sql, (user_id, pwd))
+        sql = "SELECT * FROM userTable WHERE id = %s AND pwd = %s"
+        cur.execute(sql, (id, pwd))
         user = cur.fetchone()
 
         if user:
-            print(f"로그인 성공! 환영합니다, {user[3]}님.") # name 컬럼 위치에 따라 인덱스 조정 가능
+            print(f"로그인 성공! 환영합니다, {user[0]}님.") # name 컬럼 위치에 따라 인덱스 조정 가능
             return True
         else:
             print("로그인 실패 : 이메일 또는 비밀번호가 잘못되었습니다.")
@@ -132,6 +135,7 @@ def write_post(conn):
     pass
 def view_posts(conn):
     print("[게시글 목록/조회 기능]")
+    pass
 def write_comment(conn):
     print("[댓글 작성 기능]")
     pass
@@ -140,6 +144,12 @@ def delete_post(conn):
     pass
 
 def main():
+    conn = get_connection()
+    create_user_table(conn)
+    create_board_table(conn)
+    create_comment_table(conn)
+    conn.close()
+
     is_logged_in = False  # 최초 로그인 상태: 아니오 (False)
 
     while True:
